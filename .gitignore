@@ -1,0 +1,7 @@
+*.obj
+*.res
+*.lnk
+*.map
+*.err
+win31ss.exe
+WIN31SS.SCR

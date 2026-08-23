@@ -1,0 +1,40 @@
+# Single build stage: build the OpenWatcom toolchain image from the
+# Dockerfile in this repo, cross-compile WIN31SS.SCR inside it, and
+# publish the .SCR as a job artifact.
+#
+# We build the image on every run rather than pulling a pre-built one
+# from the GitLab Container Registry. Tradeoff: this costs ~15-30s per
+# pipeline to re-download and extract the OpenWatcom snapshot, but it
+# guarantees the toolchain always matches the Dockerfile committed in
+# this repo - no separate "rebuild and push the image" step to remember
+# to run, and no risk of a stale registry image silently drifting from
+# the Dockerfile. For a low-frequency personal project this simplicity
+# is worth more than the saved seconds; if commits get frequent enough
+# for the rebuild cost to matter, switch to building the image in its
+# own job/stage, pushing it to $CI_REGISTRY_IMAGE, and having this job
+# pull that tag instead of building from source each time.
+
+stages:
+  - build
+
+build-scr:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker build -t win31ss-build .
+    # docker-in-docker runs as a sibling container with its own
+    # filesystem, so a bind mount (-v) of $CI_PROJECT_DIR would not
+    # reach it. Instead, run the build inside the image (the Dockerfile
+    # already COPYs the source in) and copy the result back out.
+    - docker create --name extract win31ss-build make
+    - docker start -a extract
+    - docker cp extract:/work/WIN31SS.SCR ./WIN31SS.SCR
+    - docker rm extract
+  artifacts:
+    paths:
+      - WIN31SS.SCR
+    expire_in: 30 days

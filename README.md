@@ -1,93 +1,102 @@
-# win31-screensaver
+# Win31SS
 
+A Windows 3.1 screensaver, written in C89 against the Win16 API and
+cross-compiled with OpenWatcom 2.0. Currently just the skeleton: command-line
+handling, window/preview/config modes, a placeholder bouncing-circle
+animation, and `CONTROL.INI` settings persistence. The real visual and a
+proper settings dialog come later.
 
+## What's a `.SCR` file?
 
-## Getting started
+A Windows screensaver is an ordinary Win16 executable (same MZ/NE format as
+a `.EXE`) that Windows invokes with a specific set of command-line switches
+instead of running normally. It's just renamed to `.SCR` and dropped into
+the Windows directory so Control Panel's Desktop applet can find it.
+`WIN31SS.SCR` in this repo *is* `win31ss.exe`, byte-for-byte, renamed.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Command-line contract
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Windows (and the Desktop control panel) invokes the `.SCR` with one of:
 
-## Add your files
+| Invocation      | Behavior                                                        |
+|------------------|------------------------------------------------------------------|
+| (no args), `/s`  | Run fullscreen. Any mouse move (after the first) or key press exits. |
+| `/c`             | Show the configuration dialog (currently an empty stub).        |
+| `/p <hwnd>`      | Embed a live preview into the given child window handle - this is what the Desktop applet's preview box uses. |
+| `/a <hwnd>`      | Password-change entry point. Not supported; this is a no-op.    |
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+`ParseCmdLine` in `src/win31ss.c` implements this, accepting both `/` and
+`-` switch prefixes case-insensitively.
 
+Settings persist to `CONTROL.INI` (Windows 3.1 predates the registry) under
+the `[ScreenSaver.Win31SS]` section, via `GetPrivateProfileInt` /
+`WritePrivateProfileString`.
+
+## Building locally
+
+Requires an OpenWatcom 2.0 install with `WATCOM` pointing at it (e.g.
+`/opt/watcom`, with `$WATCOM/binl` the directory holding the Linux-hosted
+16-bit tools):
+
+```sh
+export WATCOM=/opt/watcom
+make
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/tdshaw1/win31-screensaver.git
-git branch -M main
-git push -uf origin main
+
+This produces `WIN31SS.SCR` in the repo root. `make clean` removes build
+artifacts.
+
+Under the hood, the Makefile mirrors the build recipe OpenWatcom ships in
+its own Win16 samples (`samples/win/generic/win16`): compile with `wcc`
+using `-zW` (which generates the callback thunks Windows 3.x needs, so no
+module-definition `EXPORTS` section is required), link with `wlink` via a
+generated directive file, then bind the compiled `.res` resources into the
+linked `.exe` with `wrc`.
+
+If you don't have OpenWatcom installed locally, build inside the Docker
+image instead (see below) - it's the same environment CI uses.
+
+## Docker / CI
+
+`Dockerfile` installs OpenWatcom 2.0 on `debian:12-slim` by downloading and
+extracting the `ow-snapshot.tar.xz` release asset (a ready-built copy of
+the `$WATCOM` tree) rather than running OpenWatcom's interactive GUI
+installer, which doesn't work headlessly:
+
+```sh
+docker build -t win31ss-build .
+docker run --rm -v "$(pwd)":/work -w /work win31ss-build make
 ```
 
-## Integrate with your tools
+`.gitlab-ci.yml` defines a single `build` stage that builds this image and
+runs `make` inside it on every pipeline, publishing `WIN31SS.SCR` as a job
+artifact. It rebuilds the image from the Dockerfile each run rather than
+pulling a pre-built one from the GitLab Container Registry - slightly
+slower (~15-30s to re-fetch the OpenWatcom snapshot) but guaranteed to
+match what's committed, with no separate "rebuild and push the image" step
+to remember. If commits get frequent enough for that cost to matter, switch
+to building the image in its own job and pulling `$CI_REGISTRY_IMAGE`
+instead. Because the runner's Docker daemon is a docker-in-docker sibling
+container, the CI job can't bind-mount the checkout into it directly; it
+copies the source in at image-build time (already handled by the
+Dockerfile's `COPY`) and copies `WIN31SS.SCR` back out with `docker cp`
+after running `make`.
 
-* [Set up project integrations](https://gitlab.com/tdshaw1/win31-screensaver/-/settings/integrations)
+## Testing in 86Box
 
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+1. Build `WIN31SS.SCR` as above.
+2. Get it into the guest - either:
+   - **Shared folder**: if your 86Box machine config has a host directory
+     mounted as a network/shared drive, drop `WIN31SS.SCR` there and copy it
+     from within the guest, or
+   - **Virtual floppy**: create a blank `.img` (e.g. with 86Box's Tools >
+     New Floppy Image, or `mkfs.msdos` on a raw image on the host), copy
+     `WIN31SS.SCR` onto it with `mcopy` (from `mtools`) or by mounting it as
+     a loop device, then attach it as a floppy image in 86Box and copy the
+     file from `A:\` inside the guest.
+3. Copy `WIN31SS.SCR` into the Windows directory (typically `C:\WINDOWS`).
+4. Open **Control Panel > Desktop**, pick **Win31SS** from the Screen Saver
+   list, and use **Test** to run it fullscreen or **Setup** to open the
+   config dialog stub.
+5. To check preview-mode rendering, just select it in the list - the
+   Desktop applet's preview box calls it with `/p <hwnd>` automatically.
