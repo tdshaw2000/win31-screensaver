@@ -57,12 +57,23 @@ $(OBJ): $(SRC) $(HDRS)
 $(RES): $(RCFILE) $(HDRS)
 	$(WRC) -bt=windows -r -q -fo=$(RES) -I$(WATCOM)/h/win $(RCFILE)
 
+# Windows 3.1's Control Panel Desktop applet only lists a .SCR if its NE
+# non-resident-name-table entry (the module "description") starts with
+# "SCRNSAVE :" - this is what distinguishes a real screensaver from any
+# other renamed .EXE, and it's undocumented outside old KB articles. The
+# "option description" directive must come after "system windows" and
+# "name" or wlink silently ignores it; wlink also forces this field to
+# uppercase (unlike the original MS LINK.EXE, which preserved case - hence
+# stock screensavers showing mixed-case names like "Flying Windows" while
+# ours reads "WIN31SS" in all caps. Cosmetic only; the leading "SCRNSAVE :"
+# marker is what Control Panel actually checks for.
 $(LNK): Makefile
-	echo "debug all"        > $(LNK)
-	echo "name win31ss"     >> $(LNK)
-	echo "op map, quiet"    >> $(LNK)
-	echo "system windows"   >> $(LNK)
-	echo "file $(OBJ)"      >> $(LNK)
+	echo "debug all"                                > $(LNK)
+	echo "op map, quiet"                            >> $(LNK)
+	echo "system windows"                            >> $(LNK)
+	echo "name win31ss"                              >> $(LNK)
+	echo "option description 'SCRNSAVE : Win31SS'"   >> $(LNK)
+	echo "file $(OBJ)"                               >> $(LNK)
 
 clean:
 	rm -f $(OBJ) $(RES) $(EXE) $(LNK) $(TARGET) win31ss.map
