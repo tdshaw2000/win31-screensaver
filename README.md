@@ -94,9 +94,54 @@ after running `make`.
      `WIN31SS.SCR` onto it with `mcopy` (from `mtools`) or by mounting it as
      a loop device, then attach it as a floppy image in 86Box and copy the
      file from `A:\` inside the guest.
-3. Copy `WIN31SS.SCR` into the Windows directory (typically `C:\WINDOWS`).
-4. Open **Control Panel > Desktop**, pick **Win31SS** from the Screen Saver
-   list, and use **Test** to run it fullscreen or **Setup** to open the
-   config dialog stub.
+3. Copy `WIN31SS.SCR` into the Windows directory itself - `C:\WINDOWS`, not
+   `C:\WINDOWS\SYSTEM` (that subdirectory is for DLLs/drivers, not
+   screensavers; Control Panel won't find it there).
+4. Open **Control Panel > Desktop**. It'll appear in the Screen Saver list as
+   **SCRNSAVE : WIN31SS** (see the note on the `SCRNSAVE :` marker below for
+   why it's not just "Win31SS"). Use **Test** to run it fullscreen or
+   **Setup** to open the config dialog stub.
 5. To check preview-mode rendering, just select it in the list - the
    Desktop applet's preview box calls it with `/p <hwnd>` automatically.
+
+Note: a `.SCR` won't run via File Manager's **File > Run** or double-click -
+Windows resolves unrecognized extensions through a `WIN.INI` file
+association, and `.SCR` isn't one of the built-in recognized executable
+types (`.EXE`/`.COM`/`.BAT`/`.PIF`). This is normal for *any* `.SCR`,
+including the ones bundled with Windows - it doesn't indicate a broken
+build. Control Panel is the only intended entry point.
+
+## Notes on Win16 / Windows 3.1 quirks
+
+A few non-obvious things this project ran into, worth knowing before
+debugging build or discovery issues again:
+
+- **Control Panel's screensaver list is gated on a hidden marker, not the
+  filename or a resource.** It only lists a `.SCR` whose NE
+  non-resident-name-table entry (the module "description") starts with the
+  literal text `SCRNSAVE :`. This isn't documented anywhere beyond vague old
+  Microsoft KB articles ("Control Panel checks the header of each `.SCR`
+  file for a specific code"). We found the exact requirement by pulling a
+  stock Windows screensaver off the test VM and diffing its binary structure
+  against ours with Wine's `winedump` tool. The Makefile sets this via a
+  `wlink` `option description 'SCRNSAVE : Win31SS'` directive - it must
+  come *after* the `system windows` and `name` directives in the `.lnk`
+  file, or OpenWatcom's linker silently ignores it. OpenWatcom's `wlink`
+  also force-uppercases this field (the original Microsoft `LINK.EXE`
+  didn't), which is why the list shows `SCRNSAVE : WIN31SS` in all caps
+  rather than mixed case - cosmetic only, the leading `SCRNSAVE :` is what
+  actually matters. A `STRINGTABLE` friendly-name resource (the modern
+  Win95+/Win32 mechanism) was tried first and did *not* fix this - it's the
+  wrong mechanism for Windows 3.1 specifically.
+- **`wcl` can't be used for linking in this OpenWatcom 2.0 build.** Passing
+  a `.def` module-definition file to `wcl` makes it invoke the C compiler
+  on the `.def` file itself (a real bug, not user error). That's why this
+  project links with `wcc` (compile) + `wlink` (link) directly instead,
+  mirroring OpenWatcom's own `samples/win/generic/win16` sample rather than
+  using a `.def` file at all.
+- **Some Win32-only APIs compile against the 16-bit headers with just a
+  warning, then fail at link time.** `SetForegroundWindow` is one - it's
+  Win32-only and doesn't exist in Win16, but the compiler only warns about a
+  missing prototype rather than erroring; the actual failure only shows up
+  as an `undefined reference` from the linker. Don't trust "it compiled" as
+  proof an API is valid for Win16.
