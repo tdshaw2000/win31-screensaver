@@ -1,6 +1,12 @@
 #include <windows.h>
 #include "resource.h"
 
+STRINGTABLE
+BEGIN
+    NAME,        "Win31SS"
+    DESCRIPTION, "Win31SS - a placeholder Windows 3.1 screensaver"
+END
+
 IDD_CONFIG DIALOG 20, 20, 160, 70
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Win31SS Settings"
