@@ -50,6 +50,18 @@ $(TARGET): $(EXE)
 $(EXE): $(OBJ) $(RES) $(LNK)
 	$(WLINK) @$(LNK)
 	$(WRC) -q $(RES) $(EXE)
+	@# wlink force-uppercases the NE resident/non-resident name table
+	@# strings (module name and "option description") with no directive
+	@# to disable it - confirmed by reading wlink's own source
+	@# (ResNonResNameTable() in bld/wl/c/loados2.c unconditionally passes
+	@# ucase=true to WriteLoadU8Name()). Restore the intended mixed-case
+	@# text by patching the linked .exe in place: same-length swap
+	@# (WIN31SS -> Win31SS, 7 bytes either way), so no other NE offsets
+	@# shift. Offsets are found dynamically rather than hardcoded, since
+	@# they depend on the exact object/resource layout.
+	for off in $$(grep -a -b -o 'WIN31SS' $(EXE) | cut -d: -f1); do \
+		printf 'Win31SS' | dd of=$(EXE) bs=1 seek=$$off count=7 conv=notrunc status=none; \
+	done
 
 $(OBJ): $(SRC) $(HDRS)
 	$(WCC) $(CFLAGS) $(SRC)

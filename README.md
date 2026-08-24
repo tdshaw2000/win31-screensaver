@@ -98,7 +98,7 @@ after running `make`.
    `C:\WINDOWS\SYSTEM` (that subdirectory is for DLLs/drivers, not
    screensavers; Control Panel won't find it there).
 4. Open **Control Panel > Desktop**. It'll appear in the Screen Saver list as
-   **SCRNSAVE : WIN31SS** (see the note on the `SCRNSAVE :` marker below for
+   **SCRNSAVE : Win31SS** (see the note on the `SCRNSAVE :` marker below for
    why it's not just "Win31SS"). Use **Test** to run it fullscreen or
    **Setup** to open the config dialog stub.
 5. To check preview-mode rendering, just select it in the list - the
@@ -126,13 +126,23 @@ debugging build or discovery issues again:
   against ours with Wine's `winedump` tool. The Makefile sets this via a
   `wlink` `option description 'SCRNSAVE : Win31SS'` directive - it must
   come *after* the `system windows` and `name` directives in the `.lnk`
-  file, or OpenWatcom's linker silently ignores it. OpenWatcom's `wlink`
-  also force-uppercases this field (the original Microsoft `LINK.EXE`
-  didn't), which is why the list shows `SCRNSAVE : WIN31SS` in all caps
-  rather than mixed case - cosmetic only, the leading `SCRNSAVE :` is what
-  actually matters. A `STRINGTABLE` friendly-name resource (the modern
-  Win95+/Win32 mechanism) was tried first and did *not* fix this - it's the
-  wrong mechanism for Windows 3.1 specifically.
+  file, or OpenWatcom's linker silently ignores it. A `STRINGTABLE`
+  friendly-name resource (the modern Win95+/Win32 mechanism) was tried
+  first and did *not* fix this - it's the wrong mechanism for Windows 3.1
+  specifically.
+- **OpenWatcom's `wlink` force-uppercases the NE name-table strings, with no
+  option to disable it.** Both the module name (`name` directive) and the
+  `option description` text get run through an unconditional `toupper()` -
+  confirmed by reading `wlink`'s own source
+  (`ResNonResNameTable()`/`WriteLoadU8Name()` in `bld/wl/c/loados2.c`,
+  called with `ucase` hardcoded to `true`), not by trial and error. The
+  original Microsoft `LINK.EXE` preserved case here, which is why stock
+  screensavers show mixed-case names in Control Panel. Rebuilding `wlink`
+  from a patched source tree isn't worth it for a cosmetic string, so the
+  `Makefile` instead patches the linked `.exe` in place after `wlink`/`wrc`
+  run: it locates the (same-length) uppercased text by byte search and
+  rewrites it back to mixed case with `dd`, verified byte-for-byte to touch
+  only those bytes and nothing else in the file.
 - **`wcl` can't be used for linking in this OpenWatcom 2.0 build.** Passing
   a `.def` module-definition file to `wcl` makes it invoke the C compiler
   on the `.def` file itself (a real bug, not user error). That's why this
