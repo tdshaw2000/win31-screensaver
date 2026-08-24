@@ -46,6 +46,10 @@ static BOOL      gbIgnoreFirstMove  = TRUE;
 static int       gSpeed             = DEFAULT_SPEED;
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
+/* Dirty-rect margin around the shape's bounding box, to also cover the
+   1px border Ellipse() draws with the default pen. */
+#define SHAPE_MARGIN    2
+
 LONG FAR PASCAL WndProc(HWND, UINT, WPARAM, LPARAM);
 BOOL FAR PASCAL ConfigDlgProc(HWND, UINT, WPARAM, LPARAM);
 
@@ -54,6 +58,7 @@ static void LoadSettings(void);
 static void SaveSettings(void);
 static void AdvanceAnimation(RECT FAR *rc);
 static void DrawFrame(HDC hdc, RECT FAR *rc);
+static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut);
 
 int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     LPSTR lpCmdLine, int nCmdShow)
@@ -153,9 +158,16 @@ LONG FAR PASCAL WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         return 0;
 
     case WM_TIMER:
-        GetClientRect(hwnd, &rc);
-        AdvanceAnimation(&rc);
-        InvalidateRect(hwnd, NULL, FALSE);
+        {
+            RECT rcOld, rcNew, rcDirty;
+
+            GetClientRect(hwnd, &rc);
+            ShapeRect(&rc, gX, gY, &rcOld);
+            AdvanceAnimation(&rc);
+            ShapeRect(&rc, gX, gY, &rcNew);
+            UnionRect(&rcDirty, &rcOld, &rcNew);
+            InvalidateRect(hwnd, &rcDirty, FALSE);
+        }
         return 0;
 
     case WM_PAINT:
@@ -312,6 +324,14 @@ static void SaveSettings(void)
     char buf[16];
     sprintf(buf, "%d", gSpeed);
     WritePrivateProfileString(INI_SECTION, KEY_SPEED, buf, INI_FILE);
+}
+
+static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut)
+{
+    rcOut->left   = rcClient->left + x - SHAPE_MARGIN;
+    rcOut->top    = rcClient->top + y - SHAPE_MARGIN;
+    rcOut->right  = rcClient->left + x + SHAPE_SIZE + SHAPE_MARGIN;
+    rcOut->bottom = rcClient->top + y + SHAPE_SIZE + SHAPE_MARGIN;
 }
 
 static void AdvanceAnimation(RECT FAR *rc)
