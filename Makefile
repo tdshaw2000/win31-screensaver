@@ -55,12 +55,16 @@ $(EXE): $(OBJ) $(RES) $(LNK)
 	@# to disable it - confirmed by reading wlink's own source
 	@# (ResNonResNameTable() in bld/wl/c/loados2.c unconditionally passes
 	@# ucase=true to WriteLoadU8Name()). Restore the intended mixed-case
-	@# text by patching the linked .exe in place: same-length swap
-	@# (WIN31SS -> Win31SS, 7 bytes either way), so no other NE offsets
-	@# shift. Offsets are found dynamically rather than hardcoded, since
-	@# they depend on the exact object/resource layout.
+	@# text by patching the linked .exe in place: same-length swap per
+	@# string (module name and description each patched separately, since
+	@# they're independent strings), so no other NE offsets shift. Offsets
+	@# are found dynamically rather than hardcoded, since they depend on
+	@# the exact object/resource layout.
 	for off in $$(grep -a -b -o 'WIN31SS' $(EXE) | cut -d: -f1); do \
 		printf 'Win31SS' | dd of=$(EXE) bs=1 seek=$$off count=7 conv=notrunc status=none; \
+	done
+	for off in $$(grep -a -b -o 'THE TIM SAVER 3000' $(EXE) | cut -d: -f1); do \
+		printf 'The Tim Saver 3000' | dd of=$(EXE) bs=1 seek=$$off count=18 conv=notrunc status=none; \
 	done
 
 $(OBJ): $(SRC) $(HDRS)
@@ -84,7 +88,7 @@ $(LNK): Makefile
 	echo "op map, quiet"                            >> $(LNK)
 	echo "system windows"                            >> $(LNK)
 	echo "name win31ss"                              >> $(LNK)
-	echo "option description 'SCRNSAVE : 012345678901234567890123456789012345678'"   >> $(LNK)
+	echo "option description 'SCRNSAVE : The Tim Saver 3000'"   >> $(LNK)
 	echo "file $(OBJ)"                               >> $(LNK)
 
 clean:
