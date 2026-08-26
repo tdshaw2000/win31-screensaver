@@ -50,6 +50,9 @@ static COLOR_ENTRY gColors[] = {
     { "Magenta", RGB(255, 0, 255) },
 };
 #define NUM_COLORS (sizeof(gColors) / sizeof(gColors[0]))
+#define RAINBOW_NAME    "Rainbow"
+#define IDX_RAINBOW     ((int) NUM_COLORS) /* combobox item after the last real color */
+#define NUM_ITEMS       ((int) NUM_COLORS + 1)
 
 typedef enum {
     MODE_FULLSCREEN,
@@ -62,6 +65,7 @@ static BOOL      gbFullscreen       = FALSE;
 static BOOL      gbIgnoreFirstMove  = TRUE;
 static int       gSpeed             = DEFAULT_SPEED;
 static int       gColorIndex        = DEFAULT_COLOR;
+static int       gRainbowIndex      = 0;   /* current color while gColorIndex == IDX_RAINBOW */
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
 /* Dirty-rect margin around the shape's bounding box, to also cover the
@@ -243,6 +247,7 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
                 SendDlgItemMessage(hDlg, IDC_COLOR, CB_ADDSTRING, 0,
                                     (LPARAM) (LPSTR) gColors[i].name);
             }
+            SendDlgItemMessage(hDlg, IDC_COLOR, CB_ADDSTRING, 0, (LPARAM) (LPSTR) RAINBOW_NAME);
             SendDlgItemMessage(hDlg, IDC_COLOR, CB_SETCURSEL, gColorIndex, 0);
         }
         return TRUE;
@@ -251,7 +256,7 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
         switch (LOWORD(wParam)) {
         case IDOK:
             gColorIndex = (int) SendDlgItemMessage(hDlg, IDC_COLOR, CB_GETCURSEL, 0, 0);
-            if (gColorIndex < 0 || gColorIndex >= (int) NUM_COLORS) {
+            if (gColorIndex < 0 || gColorIndex >= NUM_ITEMS) {
                 gColorIndex = DEFAULT_COLOR;
             }
             SaveSettings();
@@ -347,7 +352,7 @@ static void LoadSettings(void)
     gDY = gSpeed;
 
     gColorIndex = GetPrivateProfileInt(INI_SECTION, KEY_COLOR, DEFAULT_COLOR, INI_FILE);
-    if (gColorIndex < 0 || gColorIndex >= (int) NUM_COLORS) {
+    if (gColorIndex < 0 || gColorIndex >= NUM_ITEMS) {
         gColorIndex = DEFAULT_COLOR;
     }
 }
@@ -373,6 +378,7 @@ static void AdvanceAnimation(RECT FAR *rc)
 {
     int width = rc->right - rc->left;
     int height = rc->bottom - rc->top;
+    BOOL bBounced = FALSE;
 
     if (width <= SHAPE_SIZE || height <= SHAPE_SIZE) {
         return;
@@ -384,18 +390,26 @@ static void AdvanceAnimation(RECT FAR *rc)
     if (gX < 0) {
         gX = 0;
         gDX = -gDX;
+        bBounced = TRUE;
     }
     if (gY < 0) {
         gY = 0;
         gDY = -gDY;
+        bBounced = TRUE;
     }
     if (gX + SHAPE_SIZE > width) {
         gX = width - SHAPE_SIZE;
         gDX = -gDX;
+        bBounced = TRUE;
     }
     if (gY + SHAPE_SIZE > height) {
         gY = height - SHAPE_SIZE;
         gDY = -gDY;
+        bBounced = TRUE;
+    }
+
+    if (bBounced && gColorIndex == IDX_RAINBOW) {
+        gRainbowIndex = (gRainbowIndex + 1) % (int) NUM_COLORS;
     }
 }
 
@@ -409,7 +423,9 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
     left = rc->left + gX;
     top = rc->top + gY;
 
-    hbrShape = CreateSolidBrush(gColors[gColorIndex].color);
+    hbrShape = CreateSolidBrush((gColorIndex == IDX_RAINBOW)
+                                     ? gColors[gRainbowIndex].color
+                                     : gColors[gColorIndex].color);
     hbrOld = SelectObject(hdc, hbrShape);
     Ellipse(hdc, left, top, left + SHAPE_SIZE, top + SHAPE_SIZE);
     SelectObject(hdc, hbrOld);
