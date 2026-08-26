@@ -30,9 +30,26 @@
 #define DEFAULT_SPEED   4       /* pixels moved per timer tick */
 #define MIN_SPEED       1
 #define MAX_SPEED       50
+#define KEY_COLOR       "Color"
+#define DEFAULT_COLOR   0       /* index into gColors[] */
 #define TIMER_ID        1
 #define TIMER_INTERVAL  100     /* ms */
 #define SHAPE_SIZE      40
+
+typedef struct {
+    char        *name;
+    COLORREF    color;
+} COLOR_ENTRY;
+
+static COLOR_ENTRY gColors[] = {
+    { "Green",   RGB(0, 255, 0) },
+    { "Red",     RGB(255, 0, 0) },
+    { "Blue",    RGB(0, 0, 255) },
+    { "Yellow",  RGB(255, 255, 0) },
+    { "White",   RGB(255, 255, 255) },
+    { "Magenta", RGB(255, 0, 255) },
+};
+#define NUM_COLORS (sizeof(gColors) / sizeof(gColors[0]))
 
 typedef enum {
     MODE_FULLSCREEN,
@@ -44,6 +61,7 @@ typedef enum {
 static BOOL      gbFullscreen       = FALSE;
 static BOOL      gbIgnoreFirstMove  = TRUE;
 static int       gSpeed             = DEFAULT_SPEED;
+static int       gColorIndex        = DEFAULT_COLOR;
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
 /* Dirty-rect margin around the shape's bounding box, to also cover the
@@ -219,13 +237,23 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
 {
     switch (message) {
     case WM_INITDIALOG:
+        {
+            int i;
+            for (i = 0; i < (int) NUM_COLORS; i++) {
+                SendDlgItemMessage(hDlg, IDC_COLOR, CB_ADDSTRING, 0,
+                                    (LPARAM) (LPSTR) gColors[i].name);
+            }
+            SendDlgItemMessage(hDlg, IDC_COLOR, CB_SETCURSEL, gColorIndex, 0);
+        }
         return TRUE;
 
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDOK:
-            /* No configurable controls yet - round-trip the current
-               settings so the CONTROL.INI persistence path is exercised. */
+            gColorIndex = (int) SendDlgItemMessage(hDlg, IDC_COLOR, CB_GETCURSEL, 0, 0);
+            if (gColorIndex < 0 || gColorIndex >= (int) NUM_COLORS) {
+                gColorIndex = DEFAULT_COLOR;
+            }
             SaveSettings();
             EndDialog(hDlg, TRUE);
             return TRUE;
@@ -317,6 +345,11 @@ static void LoadSettings(void)
     }
     gDX = gSpeed;
     gDY = gSpeed;
+
+    gColorIndex = GetPrivateProfileInt(INI_SECTION, KEY_COLOR, DEFAULT_COLOR, INI_FILE);
+    if (gColorIndex < 0 || gColorIndex >= (int) NUM_COLORS) {
+        gColorIndex = DEFAULT_COLOR;
+    }
 }
 
 static void SaveSettings(void)
@@ -324,6 +357,8 @@ static void SaveSettings(void)
     char buf[16];
     sprintf(buf, "%d", gSpeed);
     WritePrivateProfileString(INI_SECTION, KEY_SPEED, buf, INI_FILE);
+    sprintf(buf, "%d", gColorIndex);
+    WritePrivateProfileString(INI_SECTION, KEY_COLOR, buf, INI_FILE);
 }
 
 static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut)
@@ -374,7 +409,7 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
     left = rc->left + gX;
     top = rc->top + gY;
 
-    hbrShape = CreateSolidBrush(RGB(0, 255, 0));
+    hbrShape = CreateSolidBrush(gColors[gColorIndex].color);
     hbrOld = SelectObject(hdc, hbrShape);
     Ellipse(hdc, left, top, left + SHAPE_SIZE, top + SHAPE_SIZE);
     SelectObject(hdc, hbrOld);
