@@ -22,6 +22,11 @@ build-scr:
   tags:
     - win31ss-local
   script:
+    # Temporary diagnostics for the intermittent "permission denied ...
+    # docker.sock" failures on win31ss-local - remove once root-caused.
+    - id
+    - groups
+    - cat /proc/self/status | grep -i groups
     - docker build -t win31ss-build .
     - docker create --name extract win31ss-build make
     - docker start -a extract
