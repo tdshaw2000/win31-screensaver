@@ -2,17 +2,19 @@
 # Dockerfile in this repo, cross-compile WIN31SS.SCR inside it, and
 # publish the .SCR as a job artifact.
 #
-# Runs on a local shell-executor runner (tag "win31ss-local") registered
-# on the dev WSL machine, talking directly to its Docker daemon - not
-# GitLab.com's shared runners. That daemon already has the OpenWatcom
-# snapshot layer cached from local `make`/`docker build` runs, so
-# pipelines build faster than a shared runner would (no re-download of
-# the snapshot each run) and don't spend shared-runner CI minutes. The
-# job still builds the image fresh each run rather than pulling a
-# pre-built one from the registry, so the toolchain always matches the
-# Dockerfile committed in this repo - Docker's layer cache makes that
-# cheap here since nothing needs re-downloading when the Dockerfile is
-# unchanged.
+# Runs on a local shell-executor runner (tag "win31ss-local") talking
+# directly to its host's Docker daemon - not GitLab.com's shared runners.
+# The "win31ss-local" tag isn't tied to one machine: it's registered on
+# two personal machines (a home PC and a work laptop), with only one
+# enabled at a time, toggled manually to compare reliability between
+# them. Whichever is live has the OpenWatcom snapshot layer cached from
+# local `make`/`docker build` runs, so pipelines build faster than a
+# shared runner would (no re-download of the snapshot each run) and
+# don't spend shared-runner CI minutes. The job still builds the image
+# fresh each run rather than pulling a pre-built one from the registry,
+# so the toolchain always matches the Dockerfile committed in this repo
+# - Docker's layer cache makes that cheap here since nothing needs
+# re-downloading when the Dockerfile is unchanged.
 
 stages:
   - build
