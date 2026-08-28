@@ -18,7 +18,6 @@
  */
 
 #include <windows.h>
-#include <string.h>
 #include <stdio.h>
 #include "resource.h"
 
@@ -430,8 +429,4 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
     Ellipse(hdc, left, top, left + SHAPE_SIZE, top + SHAPE_SIZE);
     SelectObject(hdc, hbrOld);
     DeleteObject(hbrShape);
-
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(255, 255, 255));
-    TextOut(hdc, rc->left + 4, rc->top + 4, APP_NAME, (int) strlen(APP_NAME));
 }
