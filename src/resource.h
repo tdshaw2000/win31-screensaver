@@ -9,6 +9,8 @@
 #define IDC_SIDES_VALUE     105
 #define IDC_SPEED           106
 #define IDC_SPEED_VALUE     107
+#define IDC_TRAIL           108
+#define IDC_TRAIL_VALUE     109
 
 /* Control Panel's Desktop applet reads these string table entries (IDs 1
    and 2 - the conventional NAME/DESCRIPTION resource IDs from Microsoft's

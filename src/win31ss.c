@@ -44,6 +44,10 @@
 #define IDX_SIDES_CYCLE     (MAX_SIDES + 1) /* steps through every shape on each bounce */
 #define IDX_SIDES_RANDOM    (MAX_SIDES + 2) /* jumps to a random shape on each bounce */
 #define MAX_SIDES_SETTING   IDX_SIDES_RANDOM /* upper bound of the Sides *setting* */
+#define KEY_TRAIL       "Trail"
+#define DEFAULT_TRAIL   5       /* number of fading ghosts behind the shape */
+#define MIN_TRAIL       0       /* 0 = no trail */
+#define MAX_TRAIL       10
 #define TIMER_ID        1
 #define TIMER_INTERVAL  50      /* ms - close to Win16's ~55ms clock-tick floor */
 #define PI              3.14159265358979323846
@@ -92,17 +96,16 @@ static int       gSides             = DEFAULT_SIDES;
 static int       gCurrentSides      = DEFAULT_SIDES; /* side count actually drawn this frame */
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
-#define TRAIL_LENGTH    6   /* number of fading ghosts behind the shape */
-
 typedef struct {
     int      x, y;
     int      sides;
     COLORREF color;
 } TRAIL_ENTRY;
 
-static TRAIL_ENTRY gTrail[TRAIL_LENGTH];
-static int         gTrailHead  = 0;  /* next slot to overwrite */
-static int         gTrailCount = 0;  /* valid entries, ramps 0..TRAIL_LENGTH */
+static TRAIL_ENTRY gTrail[MAX_TRAIL];
+static int         gTrailLength = DEFAULT_TRAIL;
+static int         gTrailHead   = 0;  /* next slot to overwrite */
+static int         gTrailCount  = 0;  /* valid entries, ramps 0..gTrailLength */
 
 /* Offscreen buffer for double-buffered painting: WM_PAINT draws a full
    frame here, then BitBlt's just the dirty rect to the screen in one
@@ -360,6 +363,10 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             SetScrollRange(GetDlgItem(hDlg, IDC_SPEED), SB_CTL, MIN_SPEED, MAX_SPEED, FALSE);
             SetScrollPos(GetDlgItem(hDlg, IDC_SPEED), SB_CTL, gSpeed, TRUE);
             SetDlgItemInt(hDlg, IDC_SPEED_VALUE, (UINT) gSpeed, FALSE);
+
+            SetScrollRange(GetDlgItem(hDlg, IDC_TRAIL), SB_CTL, MIN_TRAIL, MAX_TRAIL, FALSE);
+            SetScrollPos(GetDlgItem(hDlg, IDC_TRAIL), SB_CTL, gTrailLength, TRUE);
+            SetDlgItemInt(hDlg, IDC_TRAIL_VALUE, (UINT) gTrailLength, FALSE);
         }
         return TRUE;
 
@@ -498,6 +505,45 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
                 return 0;
             }
 
+            if (hwndScroll == GetDlgItem(hDlg, IDC_TRAIL)) {
+                pos = GetScrollPos(hwndScroll, SB_CTL);
+                switch (wParam) {
+                case SB_LINELEFT:
+                    pos -= 1;
+                    break;
+                case SB_LINERIGHT:
+                    pos += 1;
+                    break;
+                case SB_PAGELEFT:
+                    pos -= 10;
+                    break;
+                case SB_PAGERIGHT:
+                    pos += 10;
+                    break;
+                case SB_THUMBTRACK:
+                case SB_THUMBPOSITION:
+                    pos = (int) LOWORD(lParam);
+                    break;
+                case SB_LEFT:
+                    pos = MIN_TRAIL;
+                    break;
+                case SB_RIGHT:
+                    pos = MAX_TRAIL;
+                    break;
+                default:
+                    break;
+                }
+                if (pos < MIN_TRAIL) {
+                    pos = MIN_TRAIL;
+                }
+                if (pos > MAX_TRAIL) {
+                    pos = MAX_TRAIL;
+                }
+                SetScrollPos(hwndScroll, SB_CTL, pos, TRUE);
+                SetDlgItemInt(hDlg, IDC_TRAIL_VALUE, (UINT) pos, FALSE);
+                return 0;
+            }
+
             return FALSE;
         }
 
@@ -531,6 +577,13 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             }
             if (gSpeed > MAX_SPEED) {
                 gSpeed = MAX_SPEED;
+            }
+            gTrailLength = GetScrollPos(GetDlgItem(hDlg, IDC_TRAIL), SB_CTL);
+            if (gTrailLength < MIN_TRAIL) {
+                gTrailLength = MIN_TRAIL;
+            }
+            if (gTrailLength > MAX_TRAIL) {
+                gTrailLength = MAX_TRAIL;
             }
             SaveSettings();
             EndDialog(hDlg, TRUE);
@@ -655,6 +708,14 @@ static void LoadSettings(void)
     } else {
         gCurrentSides = gSides;
     }
+
+    gTrailLength = GetPrivateProfileInt(INI_SECTION, KEY_TRAIL, DEFAULT_TRAIL, INI_FILE);
+    if (gTrailLength < MIN_TRAIL) {
+        gTrailLength = MIN_TRAIL;
+    }
+    if (gTrailLength > MAX_TRAIL) {
+        gTrailLength = MAX_TRAIL;
+    }
 }
 
 static void SaveSettings(void)
@@ -668,6 +729,8 @@ static void SaveSettings(void)
     WritePrivateProfileString(INI_SECTION, KEY_SIZE, buf, INI_FILE);
     sprintf(buf, "%d", gSides);
     WritePrivateProfileString(INI_SECTION, KEY_SIDES, buf, INI_FILE);
+    sprintf(buf, "%d", gTrailLength);
+    WritePrivateProfileString(INI_SECTION, KEY_TRAIL, buf, INI_FILE);
 }
 
 static void SetSidesLabel(HWND hDlg, int sides)
@@ -766,7 +829,7 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
     /* Oldest (dimmest) ghost first, so the brightest ghost and the live
        shape paint on top where they overlap. */
     for (i = 0; i < gTrailCount; i++) {
-        int idx = (gTrailHead + TRAIL_LENGTH - gTrailCount + i) % TRAIL_LENGTH;
+        int idx = (gTrailHead + gTrailLength - gTrailCount + i) % gTrailLength;
         int age = gTrailCount - i; /* i=0 -> oldest -> largest age */
         COLORREF dimmed = DimColor(gTrail[idx].color, age, gTrailCount);
         DrawShapeAt(hdc, rc->left + gTrail[idx].x, rc->top + gTrail[idx].y,
@@ -827,12 +890,15 @@ static COLORREF DimColor(COLORREF color, int age, int maxAge)
 
 static void PushTrail(int x, int y, int sides, COLORREF color)
 {
+    if (gTrailLength <= 0) {
+        return;
+    }
     gTrail[gTrailHead].x = x;
     gTrail[gTrailHead].y = y;
     gTrail[gTrailHead].sides = sides;
     gTrail[gTrailHead].color = color;
-    gTrailHead = (gTrailHead + 1) % TRAIL_LENGTH;
-    if (gTrailCount < TRAIL_LENGTH) {
+    gTrailHead = (gTrailHead + 1) % gTrailLength;
+    if (gTrailCount < gTrailLength) {
         gTrailCount++;
     }
 }
