@@ -321,6 +321,10 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             SetScrollRange(GetDlgItem(hDlg, IDC_SIDES), SB_CTL, MIN_SIDES, MAX_SIDES_SETTING, FALSE);
             SetScrollPos(GetDlgItem(hDlg, IDC_SIDES), SB_CTL, gSides, TRUE);
             SetSidesLabel(hDlg, gSides);
+
+            SetScrollRange(GetDlgItem(hDlg, IDC_SPEED), SB_CTL, MIN_SPEED, MAX_SPEED, FALSE);
+            SetScrollPos(GetDlgItem(hDlg, IDC_SPEED), SB_CTL, gSpeed, TRUE);
+            SetDlgItemInt(hDlg, IDC_SPEED_VALUE, (UINT) gSpeed, FALSE);
         }
         return TRUE;
 
@@ -420,6 +424,45 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
                 return 0;
             }
 
+            if (hwndScroll == GetDlgItem(hDlg, IDC_SPEED)) {
+                pos = GetScrollPos(hwndScroll, SB_CTL);
+                switch (wParam) {
+                case SB_LINELEFT:
+                    pos -= 1;
+                    break;
+                case SB_LINERIGHT:
+                    pos += 1;
+                    break;
+                case SB_PAGELEFT:
+                    pos -= 10;
+                    break;
+                case SB_PAGERIGHT:
+                    pos += 10;
+                    break;
+                case SB_THUMBTRACK:
+                case SB_THUMBPOSITION:
+                    pos = (int) LOWORD(lParam);
+                    break;
+                case SB_LEFT:
+                    pos = MIN_SPEED;
+                    break;
+                case SB_RIGHT:
+                    pos = MAX_SPEED;
+                    break;
+                default:
+                    break;
+                }
+                if (pos < MIN_SPEED) {
+                    pos = MIN_SPEED;
+                }
+                if (pos > MAX_SPEED) {
+                    pos = MAX_SPEED;
+                }
+                SetScrollPos(hwndScroll, SB_CTL, pos, TRUE);
+                SetDlgItemInt(hDlg, IDC_SPEED_VALUE, (UINT) pos, FALSE);
+                return 0;
+            }
+
             return FALSE;
         }
 
@@ -446,6 +489,13 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             }
             if (gSides == 2) {
                 gSides = 1;
+            }
+            gSpeed = GetScrollPos(GetDlgItem(hDlg, IDC_SPEED), SB_CTL);
+            if (gSpeed < MIN_SPEED) {
+                gSpeed = MIN_SPEED;
+            }
+            if (gSpeed > MAX_SPEED) {
+                gSpeed = MAX_SPEED;
             }
             SaveSettings();
             EndDialog(hDlg, TRUE);
