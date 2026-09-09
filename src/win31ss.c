@@ -28,9 +28,9 @@
 #define INI_SECTION     "ScreenSaver.Win31SS"
 #define INI_FILE        "CONTROL.INI"
 #define KEY_SPEED       "Speed"
-#define DEFAULT_SPEED   4       /* pixels moved per timer tick */
+#define DEFAULT_SPEED   2       /* pixels moved per timer tick */
 #define MIN_SPEED       1
-#define MAX_SPEED       50
+#define MAX_SPEED       25
 #define KEY_COLOR       "Color"
 #define DEFAULT_COLOR   0       /* index into gColors[] */
 #define KEY_SIZE        "Size"
@@ -45,7 +45,7 @@
 #define IDX_SIDES_RANDOM    (MAX_SIDES + 2) /* jumps to a random shape on each bounce */
 #define MAX_SIDES_SETTING   IDX_SIDES_RANDOM /* upper bound of the Sides *setting* */
 #define TIMER_ID        1
-#define TIMER_INTERVAL  100     /* ms */
+#define TIMER_INTERVAL  50      /* ms - close to Win16's ~55ms clock-tick floor */
 #define PI              3.14159265358979323846
 
 typedef struct {
