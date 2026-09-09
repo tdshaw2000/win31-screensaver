@@ -19,6 +19,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <math.h>
 #include "resource.h"
 
 #define APP_NAME        "Win31SS"
@@ -35,13 +36,26 @@
 #define DEFAULT_SIZE    40      /* ball diameter, in pixels */
 #define MIN_SIZE        10
 #define MAX_SIZE        100
+#define KEY_SIDES       "Sides"
+#define DEFAULT_SIDES   1       /* 1 = circle, matches the pre-shape behavior */
+#define MIN_SIDES       1
+#define MAX_SIDES       15
 #define TIMER_ID        1
 #define TIMER_INTERVAL  100     /* ms */
+#define PI              3.14159265358979323846
 
 typedef struct {
     char        *name;
     COLORREF    color;
 } COLOR_ENTRY;
+
+/* Indexed directly by side count; index 0 and 2 are unused (0 doesn't
+   occur, and 2 - a degenerate polygon - is skipped by the UI). */
+static char *gShapeNames[MAX_SIDES + 1] = {
+    NULL, "Circle", NULL, "Triangle", "Square", "Pentagon", "Hexagon",
+    "Heptagon", "Octagon", "Nonagon", "Decagon", "Hendecagon", "Dodecagon",
+    "Tridecagon", "Tetradecagon", "Pentadecagon"
+};
 
 static COLOR_ENTRY gColors[] = {
     { "Green",   RGB(0, 255, 0) },
@@ -69,6 +83,7 @@ static int       gSpeed             = DEFAULT_SPEED;
 static int       gColorIndex        = DEFAULT_COLOR;
 static int       gRainbowIndex      = 0;   /* current color while gColorIndex == IDX_RAINBOW */
 static int       gShapeSize         = DEFAULT_SIZE;
+static int       gSides             = DEFAULT_SIDES;
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
 /* Dirty-rect margin around the shape's bounding box, to also cover the
@@ -84,6 +99,7 @@ static void SaveSettings(void);
 static void AdvanceAnimation(RECT FAR *rc);
 static void DrawFrame(HDC hdc, RECT FAR *rc);
 static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut);
+static void SetSidesLabel(HWND hDlg, int sides);
 
 int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     LPSTR lpCmdLine, int nCmdShow)
@@ -256,6 +272,10 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             SetScrollRange(GetDlgItem(hDlg, IDC_BALLSIZE), SB_CTL, MIN_SIZE, MAX_SIZE, FALSE);
             SetScrollPos(GetDlgItem(hDlg, IDC_BALLSIZE), SB_CTL, gShapeSize, TRUE);
             SetDlgItemInt(hDlg, IDC_BALLSIZE_VALUE, (UINT) gShapeSize, FALSE);
+
+            SetScrollRange(GetDlgItem(hDlg, IDC_SIDES), SB_CTL, MIN_SIDES, MAX_SIDES, FALSE);
+            SetScrollPos(GetDlgItem(hDlg, IDC_SIDES), SB_CTL, gSides, TRUE);
+            SetSidesLabel(hDlg, gSides);
         }
         return TRUE;
 
@@ -266,49 +286,97 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
     case WM_HSCROLL:
         {
             HWND hwndScroll = (HWND) HIWORD(lParam);
+            BOOL bIncrement;
             int pos;
 
-            if (hwndScroll != GetDlgItem(hDlg, IDC_BALLSIZE)) {
-                return FALSE;
+            if (hwndScroll == GetDlgItem(hDlg, IDC_BALLSIZE)) {
+                pos = GetScrollPos(hwndScroll, SB_CTL);
+                switch (wParam) {
+                case SB_LINELEFT:
+                    pos -= 1;
+                    break;
+                case SB_LINERIGHT:
+                    pos += 1;
+                    break;
+                case SB_PAGELEFT:
+                    pos -= 10;
+                    break;
+                case SB_PAGERIGHT:
+                    pos += 10;
+                    break;
+                case SB_THUMBTRACK:
+                case SB_THUMBPOSITION:
+                    pos = (int) LOWORD(lParam);
+                    break;
+                case SB_LEFT:
+                    pos = MIN_SIZE;
+                    break;
+                case SB_RIGHT:
+                    pos = MAX_SIZE;
+                    break;
+                default:
+                    break;
+                }
+                if (pos < MIN_SIZE) {
+                    pos = MIN_SIZE;
+                }
+                if (pos > MAX_SIZE) {
+                    pos = MAX_SIZE;
+                }
+                SetScrollPos(hwndScroll, SB_CTL, pos, TRUE);
+                SetDlgItemInt(hDlg, IDC_BALLSIZE_VALUE, (UINT) pos, FALSE);
+                return 0;
             }
 
-            pos = GetScrollPos(hwndScroll, SB_CTL);
-            switch (wParam) {
-            case SB_LINELEFT:
-                pos -= 1;
-                break;
-            case SB_LINERIGHT:
-                pos += 1;
-                break;
-            case SB_PAGELEFT:
-                pos -= 10;
-                break;
-            case SB_PAGERIGHT:
-                pos += 10;
-                break;
-            case SB_THUMBTRACK:
-            case SB_THUMBPOSITION:
-                pos = (int) LOWORD(lParam);
-                break;
-            case SB_LEFT:
-                pos = MIN_SIZE;
-                break;
-            case SB_RIGHT:
-                pos = MAX_SIZE;
-                break;
-            default:
-                break;
+            if (hwndScroll == GetDlgItem(hDlg, IDC_SIDES)) {
+                pos = GetScrollPos(hwndScroll, SB_CTL);
+                bIncrement = FALSE;
+                switch (wParam) {
+                case SB_LINELEFT:
+                    pos -= 1;
+                    break;
+                case SB_LINERIGHT:
+                    pos += 1;
+                    bIncrement = TRUE;
+                    break;
+                case SB_PAGELEFT:
+                    pos -= 10;
+                    break;
+                case SB_PAGERIGHT:
+                    pos += 10;
+                    bIncrement = TRUE;
+                    break;
+                case SB_THUMBTRACK:
+                case SB_THUMBPOSITION:
+                    bIncrement = ((int) LOWORD(lParam) >= pos);
+                    pos = (int) LOWORD(lParam);
+                    break;
+                case SB_LEFT:
+                    pos = MIN_SIDES;
+                    break;
+                case SB_RIGHT:
+                    pos = MAX_SIDES;
+                    bIncrement = TRUE;
+                    break;
+                default:
+                    break;
+                }
+                if (pos < MIN_SIDES) {
+                    pos = MIN_SIDES;
+                }
+                if (pos > MAX_SIDES) {
+                    pos = MAX_SIDES;
+                }
+                if (pos == 2) {
+                    pos = bIncrement ? 3 : 1;
+                }
+                SetScrollPos(hwndScroll, SB_CTL, pos, TRUE);
+                SetSidesLabel(hDlg, pos);
+                return 0;
             }
-            if (pos < MIN_SIZE) {
-                pos = MIN_SIZE;
-            }
-            if (pos > MAX_SIZE) {
-                pos = MAX_SIZE;
-            }
-            SetScrollPos(hwndScroll, SB_CTL, pos, TRUE);
-            SetDlgItemInt(hDlg, IDC_BALLSIZE_VALUE, (UINT) pos, FALSE);
+
+            return FALSE;
         }
-        return 0;
 
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
@@ -323,6 +391,16 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             }
             if (gShapeSize > MAX_SIZE) {
                 gShapeSize = MAX_SIZE;
+            }
+            gSides = GetScrollPos(GetDlgItem(hDlg, IDC_SIDES), SB_CTL);
+            if (gSides < MIN_SIDES) {
+                gSides = MIN_SIDES;
+            }
+            if (gSides > MAX_SIDES) {
+                gSides = MAX_SIDES;
+            }
+            if (gSides == 2) {
+                gSides = 1;
             }
             SaveSettings();
             EndDialog(hDlg, TRUE);
@@ -428,6 +506,17 @@ static void LoadSettings(void)
     if (gShapeSize > MAX_SIZE) {
         gShapeSize = MAX_SIZE;
     }
+
+    gSides = GetPrivateProfileInt(INI_SECTION, KEY_SIDES, DEFAULT_SIDES, INI_FILE);
+    if (gSides < MIN_SIDES) {
+        gSides = MIN_SIDES;
+    }
+    if (gSides > MAX_SIDES) {
+        gSides = MAX_SIDES;
+    }
+    if (gSides == 2) {
+        gSides = 1;
+    }
 }
 
 static void SaveSettings(void)
@@ -439,6 +528,15 @@ static void SaveSettings(void)
     WritePrivateProfileString(INI_SECTION, KEY_COLOR, buf, INI_FILE);
     sprintf(buf, "%d", gShapeSize);
     WritePrivateProfileString(INI_SECTION, KEY_SIZE, buf, INI_FILE);
+    sprintf(buf, "%d", gSides);
+    WritePrivateProfileString(INI_SECTION, KEY_SIDES, buf, INI_FILE);
+}
+
+static void SetSidesLabel(HWND hDlg, int sides)
+{
+    char buf[24];
+    sprintf(buf, "%d: %s", sides, gShapeNames[sides]);
+    SetDlgItemText(hDlg, IDC_SIDES_VALUE, buf);
 }
 
 static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut)
@@ -502,7 +600,25 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
                                      ? gColors[gRainbowIndex].color
                                      : gColors[gColorIndex].color);
     hbrOld = SelectObject(hdc, hbrShape);
-    Ellipse(hdc, left, top, left + gShapeSize, top + gShapeSize);
+
+    if (gSides <= 1) {
+        Ellipse(hdc, left, top, left + gShapeSize, top + gShapeSize);
+    } else {
+        POINT pts[MAX_SIDES];
+        double centerX = left + gShapeSize / 2.0;
+        double centerY = top + gShapeSize / 2.0;
+        double radius = gShapeSize / 2.0;
+        double angleStep = 2.0 * PI / gSides;
+        int i;
+
+        for (i = 0; i < gSides; i++) {
+            double angle = -PI / 2.0 + i * angleStep;
+            pts[i].x = (int) (centerX + radius * cos(angle));
+            pts[i].y = (int) (centerY + radius * sin(angle));
+        }
+        Polygon(hdc, pts, gSides);
+    }
+
     SelectObject(hdc, hbrOld);
     DeleteObject(hbrShape);
 }
