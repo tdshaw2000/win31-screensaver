@@ -17,7 +17,7 @@ BEGIN
     LTEXT         "Size:", -1, 10, 35, 40, 8
     SCROLLBAR     IDC_BALLSIZE, 55, 33, 70, 10, SBS_HORZ | WS_TABSTOP
     LTEXT         "40", IDC_BALLSIZE_VALUE, 129, 35, 22, 8
-    LTEXT         "Shape:", -1, 10, 54, 40, 8
+    LTEXT         "Sides:", -1, 10, 54, 40, 8
     SCROLLBAR     IDC_SIDES, 55, 52, 70, 10, SBS_HORZ | WS_TABSTOP
     LTEXT         "1: Circle", IDC_SIDES_VALUE, 10, 65, 140, 8
     DEFPUSHBUTTON "OK",     IDOK,     55, 80, 40, 14
