@@ -31,9 +31,12 @@
 #define MAX_SPEED       50
 #define KEY_COLOR       "Color"
 #define DEFAULT_COLOR   0       /* index into gColors[] */
+#define KEY_SIZE        "Size"
+#define DEFAULT_SIZE    40      /* ball diameter, in pixels */
+#define MIN_SIZE        10
+#define MAX_SIZE        100
 #define TIMER_ID        1
 #define TIMER_INTERVAL  100     /* ms */
-#define SHAPE_SIZE      40
 
 typedef struct {
     char        *name;
@@ -65,6 +68,7 @@ static BOOL      gbIgnoreFirstMove  = TRUE;
 static int       gSpeed             = DEFAULT_SPEED;
 static int       gColorIndex        = DEFAULT_COLOR;
 static int       gRainbowIndex      = 0;   /* current color while gColorIndex == IDX_RAINBOW */
+static int       gShapeSize         = DEFAULT_SIZE;
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
 /* Dirty-rect margin around the shape's bounding box, to also cover the
@@ -248,8 +252,63 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             }
             SendDlgItemMessage(hDlg, IDC_COLOR, CB_ADDSTRING, 0, (LPARAM) (LPSTR) RAINBOW_NAME);
             SendDlgItemMessage(hDlg, IDC_COLOR, CB_SETCURSEL, gColorIndex, 0);
+
+            SetScrollRange(GetDlgItem(hDlg, IDC_BALLSIZE), SB_CTL, MIN_SIZE, MAX_SIZE, FALSE);
+            SetScrollPos(GetDlgItem(hDlg, IDC_BALLSIZE), SB_CTL, gShapeSize, TRUE);
+            SetDlgItemInt(hDlg, IDC_BALLSIZE_VALUE, (UINT) gShapeSize, FALSE);
         }
         return TRUE;
+
+    /* Win16's WM_HSCROLL carries the notification code in wParam, and the
+       thumb position (THUMBTRACK/THUMBPOSITION only) plus the control's
+       handle in LOWORD/HIWORD(lParam) - unlike Win32, which packs code and
+       position into wParam and passes just the handle in lParam. */
+    case WM_HSCROLL:
+        {
+            HWND hwndScroll = (HWND) HIWORD(lParam);
+            int pos;
+
+            if (hwndScroll != GetDlgItem(hDlg, IDC_BALLSIZE)) {
+                return FALSE;
+            }
+
+            pos = GetScrollPos(hwndScroll, SB_CTL);
+            switch (wParam) {
+            case SB_LINELEFT:
+                pos -= 1;
+                break;
+            case SB_LINERIGHT:
+                pos += 1;
+                break;
+            case SB_PAGELEFT:
+                pos -= 10;
+                break;
+            case SB_PAGERIGHT:
+                pos += 10;
+                break;
+            case SB_THUMBTRACK:
+            case SB_THUMBPOSITION:
+                pos = (int) LOWORD(lParam);
+                break;
+            case SB_LEFT:
+                pos = MIN_SIZE;
+                break;
+            case SB_RIGHT:
+                pos = MAX_SIZE;
+                break;
+            default:
+                break;
+            }
+            if (pos < MIN_SIZE) {
+                pos = MIN_SIZE;
+            }
+            if (pos > MAX_SIZE) {
+                pos = MAX_SIZE;
+            }
+            SetScrollPos(hwndScroll, SB_CTL, pos, TRUE);
+            SetDlgItemInt(hDlg, IDC_BALLSIZE_VALUE, (UINT) pos, FALSE);
+        }
+        return 0;
 
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
@@ -257,6 +316,13 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             gColorIndex = (int) SendDlgItemMessage(hDlg, IDC_COLOR, CB_GETCURSEL, 0, 0);
             if (gColorIndex < 0 || gColorIndex >= NUM_ITEMS) {
                 gColorIndex = DEFAULT_COLOR;
+            }
+            gShapeSize = GetScrollPos(GetDlgItem(hDlg, IDC_BALLSIZE), SB_CTL);
+            if (gShapeSize < MIN_SIZE) {
+                gShapeSize = MIN_SIZE;
+            }
+            if (gShapeSize > MAX_SIZE) {
+                gShapeSize = MAX_SIZE;
             }
             SaveSettings();
             EndDialog(hDlg, TRUE);
@@ -354,6 +420,14 @@ static void LoadSettings(void)
     if (gColorIndex < 0 || gColorIndex >= NUM_ITEMS) {
         gColorIndex = DEFAULT_COLOR;
     }
+
+    gShapeSize = GetPrivateProfileInt(INI_SECTION, KEY_SIZE, DEFAULT_SIZE, INI_FILE);
+    if (gShapeSize < MIN_SIZE) {
+        gShapeSize = MIN_SIZE;
+    }
+    if (gShapeSize > MAX_SIZE) {
+        gShapeSize = MAX_SIZE;
+    }
 }
 
 static void SaveSettings(void)
@@ -363,14 +437,16 @@ static void SaveSettings(void)
     WritePrivateProfileString(INI_SECTION, KEY_SPEED, buf, INI_FILE);
     sprintf(buf, "%d", gColorIndex);
     WritePrivateProfileString(INI_SECTION, KEY_COLOR, buf, INI_FILE);
+    sprintf(buf, "%d", gShapeSize);
+    WritePrivateProfileString(INI_SECTION, KEY_SIZE, buf, INI_FILE);
 }
 
 static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut)
 {
     rcOut->left   = rcClient->left + x - SHAPE_MARGIN;
     rcOut->top    = rcClient->top + y - SHAPE_MARGIN;
-    rcOut->right  = rcClient->left + x + SHAPE_SIZE + SHAPE_MARGIN;
-    rcOut->bottom = rcClient->top + y + SHAPE_SIZE + SHAPE_MARGIN;
+    rcOut->right  = rcClient->left + x + gShapeSize + SHAPE_MARGIN;
+    rcOut->bottom = rcClient->top + y + gShapeSize + SHAPE_MARGIN;
 }
 
 static void AdvanceAnimation(RECT FAR *rc)
@@ -379,7 +455,7 @@ static void AdvanceAnimation(RECT FAR *rc)
     int height = rc->bottom - rc->top;
     BOOL bBounced = FALSE;
 
-    if (width <= SHAPE_SIZE || height <= SHAPE_SIZE) {
+    if (width <= gShapeSize || height <= gShapeSize) {
         return;
     }
 
@@ -396,13 +472,13 @@ static void AdvanceAnimation(RECT FAR *rc)
         gDY = -gDY;
         bBounced = TRUE;
     }
-    if (gX + SHAPE_SIZE > width) {
-        gX = width - SHAPE_SIZE;
+    if (gX + gShapeSize > width) {
+        gX = width - gShapeSize;
         gDX = -gDX;
         bBounced = TRUE;
     }
-    if (gY + SHAPE_SIZE > height) {
-        gY = height - SHAPE_SIZE;
+    if (gY + gShapeSize > height) {
+        gY = height - gShapeSize;
         gDY = -gDY;
         bBounced = TRUE;
     }
@@ -426,7 +502,7 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
                                      ? gColors[gRainbowIndex].color
                                      : gColors[gColorIndex].color);
     hbrOld = SelectObject(hdc, hbrShape);
-    Ellipse(hdc, left, top, left + SHAPE_SIZE, top + SHAPE_SIZE);
+    Ellipse(hdc, left, top, left + gShapeSize, top + gShapeSize);
     SelectObject(hdc, hbrOld);
     DeleteObject(hbrShape);
 }
