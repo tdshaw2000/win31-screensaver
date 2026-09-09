@@ -20,6 +20,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
 #include "resource.h"
 
 #define APP_NAME        "Win31SS"
@@ -39,7 +40,10 @@
 #define KEY_SIDES       "Sides"
 #define DEFAULT_SIDES   1       /* 1 = circle, matches the pre-shape behavior */
 #define MIN_SIDES       1
-#define MAX_SIDES       15
+#define MAX_SIDES       15      /* max sides of an actual drawn polygon */
+#define IDX_SIDES_CYCLE     (MAX_SIDES + 1) /* steps through every shape on each bounce */
+#define IDX_SIDES_RANDOM    (MAX_SIDES + 2) /* jumps to a random shape on each bounce */
+#define MAX_SIDES_SETTING   IDX_SIDES_RANDOM /* upper bound of the Sides *setting* */
 #define TIMER_ID        1
 #define TIMER_INTERVAL  100     /* ms */
 #define PI              3.14159265358979323846
@@ -50,11 +54,12 @@ typedef struct {
 } COLOR_ENTRY;
 
 /* Indexed directly by side count; index 0 and 2 are unused (0 doesn't
-   occur, and 2 - a degenerate polygon - is skipped by the UI). */
-static char *gShapeNames[MAX_SIDES + 1] = {
+   occur, and 2 - a degenerate polygon - is skipped by the UI). Indices
+   past MAX_SIDES are the Cycle/Random modes, not real side counts. */
+static char *gShapeNames[MAX_SIDES_SETTING + 1] = {
     NULL, "Circle", NULL, "Triangle", "Square", "Pentagon", "Hexagon",
     "Heptagon", "Octagon", "Nonagon", "Decagon", "Hendecagon", "Dodecagon",
-    "Tridecagon", "Tetradecagon", "Pentadecagon"
+    "Tridecagon", "Tetradecagon", "Pentadecagon", "Cycle", "Random"
 };
 
 static COLOR_ENTRY gColors[] = {
@@ -84,6 +89,7 @@ static int       gColorIndex        = DEFAULT_COLOR;
 static int       gRainbowIndex      = 0;   /* current color while gColorIndex == IDX_RAINBOW */
 static int       gShapeSize         = DEFAULT_SIZE;
 static int       gSides             = DEFAULT_SIDES;
+static int       gCurrentSides      = DEFAULT_SIDES; /* side count actually drawn this frame */
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
 /* Dirty-rect margin around the shape's bounding box, to also cover the
@@ -100,6 +106,8 @@ static void AdvanceAnimation(RECT FAR *rc);
 static void DrawFrame(HDC hdc, RECT FAR *rc);
 static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut);
 static void SetSidesLabel(HWND hDlg, int sides);
+static int  NextValidSides(int sides);
+static int  RandomValidSides(void);
 
 int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     LPSTR lpCmdLine, int nCmdShow)
@@ -122,6 +130,7 @@ int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         mode = MODE_FULLSCREEN;
     }
 
+    srand((unsigned) GetTickCount());
     LoadSettings();
 
     if (mode == MODE_CONFIG) {
@@ -273,7 +282,7 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             SetScrollPos(GetDlgItem(hDlg, IDC_BALLSIZE), SB_CTL, gShapeSize, TRUE);
             SetDlgItemInt(hDlg, IDC_BALLSIZE_VALUE, (UINT) gShapeSize, FALSE);
 
-            SetScrollRange(GetDlgItem(hDlg, IDC_SIDES), SB_CTL, MIN_SIDES, MAX_SIDES, FALSE);
+            SetScrollRange(GetDlgItem(hDlg, IDC_SIDES), SB_CTL, MIN_SIDES, MAX_SIDES_SETTING, FALSE);
             SetScrollPos(GetDlgItem(hDlg, IDC_SIDES), SB_CTL, gSides, TRUE);
             SetSidesLabel(hDlg, gSides);
         }
@@ -355,7 +364,7 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
                     pos = MIN_SIDES;
                     break;
                 case SB_RIGHT:
-                    pos = MAX_SIDES;
+                    pos = MAX_SIDES_SETTING;
                     bIncrement = TRUE;
                     break;
                 default:
@@ -364,8 +373,8 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
                 if (pos < MIN_SIDES) {
                     pos = MIN_SIDES;
                 }
-                if (pos > MAX_SIDES) {
-                    pos = MAX_SIDES;
+                if (pos > MAX_SIDES_SETTING) {
+                    pos = MAX_SIDES_SETTING;
                 }
                 if (pos == 2) {
                     pos = bIncrement ? 3 : 1;
@@ -396,8 +405,8 @@ BOOL FAR PASCAL ConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
             if (gSides < MIN_SIDES) {
                 gSides = MIN_SIDES;
             }
-            if (gSides > MAX_SIDES) {
-                gSides = MAX_SIDES;
+            if (gSides > MAX_SIDES_SETTING) {
+                gSides = MAX_SIDES_SETTING;
             }
             if (gSides == 2) {
                 gSides = 1;
@@ -511,11 +520,19 @@ static void LoadSettings(void)
     if (gSides < MIN_SIDES) {
         gSides = MIN_SIDES;
     }
-    if (gSides > MAX_SIDES) {
-        gSides = MAX_SIDES;
+    if (gSides > MAX_SIDES_SETTING) {
+        gSides = MAX_SIDES_SETTING;
     }
     if (gSides == 2) {
         gSides = 1;
+    }
+
+    if (gSides == IDX_SIDES_CYCLE) {
+        gCurrentSides = MIN_SIDES;
+    } else if (gSides == IDX_SIDES_RANDOM) {
+        gCurrentSides = RandomValidSides();
+    } else {
+        gCurrentSides = gSides;
     }
 }
 
@@ -535,8 +552,34 @@ static void SaveSettings(void)
 static void SetSidesLabel(HWND hDlg, int sides)
 {
     char buf[24];
-    sprintf(buf, "%d: %s", sides, gShapeNames[sides]);
+    if (sides > MAX_SIDES) {
+        sprintf(buf, "%s", gShapeNames[sides]);
+    } else {
+        sprintf(buf, "%d: %s", sides, gShapeNames[sides]);
+    }
     SetDlgItemText(hDlg, IDC_SIDES_VALUE, buf);
+}
+
+/* Next shape in Cycle mode: steps through every valid side count, skipping
+   the degenerate 2 and wrapping from Pentadecagon back to Circle. */
+static int NextValidSides(int sides)
+{
+    sides++;
+    if (sides == 2) {
+        sides = 3;
+    }
+    if (sides > MAX_SIDES) {
+        sides = MIN_SIDES;
+    }
+    return sides;
+}
+
+/* A uniformly random shape for Random mode, from the 14 valid side counts
+   {1,3,4,...,15}: index 0 maps to 1 (Circle), index n>0 maps to n+2. */
+static int RandomValidSides(void)
+{
+    int idx = rand() % (MAX_SIDES - 1);
+    return (idx == 0) ? MIN_SIDES : idx + 2;
 }
 
 static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut)
@@ -581,8 +624,15 @@ static void AdvanceAnimation(RECT FAR *rc)
         bBounced = TRUE;
     }
 
-    if (bBounced && gColorIndex == IDX_RAINBOW) {
-        gRainbowIndex = (gRainbowIndex + 1) % (int) NUM_COLORS;
+    if (bBounced) {
+        if (gColorIndex == IDX_RAINBOW) {
+            gRainbowIndex = (gRainbowIndex + 1) % (int) NUM_COLORS;
+        }
+        if (gSides == IDX_SIDES_CYCLE) {
+            gCurrentSides = NextValidSides(gCurrentSides);
+        } else if (gSides == IDX_SIDES_RANDOM) {
+            gCurrentSides = RandomValidSides();
+        }
     }
 }
 
@@ -601,22 +651,22 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
                                      : gColors[gColorIndex].color);
     hbrOld = SelectObject(hdc, hbrShape);
 
-    if (gSides <= 1) {
+    if (gCurrentSides <= 1) {
         Ellipse(hdc, left, top, left + gShapeSize, top + gShapeSize);
     } else {
         POINT pts[MAX_SIDES];
         double centerX = left + gShapeSize / 2.0;
         double centerY = top + gShapeSize / 2.0;
         double radius = gShapeSize / 2.0;
-        double angleStep = 2.0 * PI / gSides;
+        double angleStep = 2.0 * PI / gCurrentSides;
         int i;
 
-        for (i = 0; i < gSides; i++) {
+        for (i = 0; i < gCurrentSides; i++) {
             double angle = -PI / 2.0 + i * angleStep;
             pts[i].x = (int) (centerX + radius * cos(angle));
             pts[i].y = (int) (centerY + radius * sin(angle));
         }
-        Polygon(hdc, pts, gSides);
+        Polygon(hdc, pts, gCurrentSides);
     }
 
     SelectObject(hdc, hbrOld);
