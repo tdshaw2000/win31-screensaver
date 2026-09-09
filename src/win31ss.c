@@ -92,6 +92,18 @@ static int       gSides             = DEFAULT_SIDES;
 static int       gCurrentSides      = DEFAULT_SIDES; /* side count actually drawn this frame */
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
+#define TRAIL_LENGTH    6   /* number of fading ghosts behind the shape */
+
+typedef struct {
+    int      x, y;
+    int      sides;
+    COLORREF color;
+} TRAIL_ENTRY;
+
+static TRAIL_ENTRY gTrail[TRAIL_LENGTH];
+static int         gTrailHead  = 0;  /* next slot to overwrite */
+static int         gTrailCount = 0;  /* valid entries, ramps 0..TRAIL_LENGTH */
+
 /* Offscreen buffer for double-buffered painting: WM_PAINT draws a full
    frame here, then BitBlt's just the dirty rect to the screen in one
    atomic call, so the screen never shows a mid-erase frame. */
@@ -111,6 +123,10 @@ static void LoadSettings(void);
 static void SaveSettings(void);
 static void AdvanceAnimation(RECT FAR *rc);
 static void DrawFrame(HDC hdc, RECT FAR *rc);
+static void DrawShapeAt(HDC hdc, int left, int top, int sides, COLORREF color);
+static COLORREF CurrentColor(void);
+static COLORREF DimColor(COLORREF color, int age, int maxAge);
+static void PushTrail(int x, int y, int sides, COLORREF color);
 static void ShapeRect(RECT FAR *rcClient, int x, int y, RECT FAR *rcOut);
 static void SetSidesLabel(HWND hDlg, int sides);
 static int  NextValidSides(int sides);
@@ -240,13 +256,23 @@ LONG FAR PASCAL WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_TIMER:
         {
-            RECT rcOld, rcNew, rcDirty;
+            RECT rcOld, rcNew, rcDirty, rcTrail;
+            int i;
 
             GetClientRect(hwnd, &rc);
             ShapeRect(&rc, gX, gY, &rcOld);
+
+            rcDirty = rcOld;
+            for (i = 0; i < gTrailCount; i++) {
+                ShapeRect(&rc, gTrail[i].x, gTrail[i].y, &rcTrail);
+                UnionRect(&rcDirty, &rcDirty, &rcTrail);
+            }
+
+            PushTrail(gX, gY, gCurrentSides, CurrentColor());
+
             AdvanceAnimation(&rc);
             ShapeRect(&rc, gX, gY, &rcNew);
-            UnionRect(&rcDirty, &rcOld, &rcNew);
+            UnionRect(&rcDirty, &rcDirty, &rcNew);
             InvalidateRect(hwnd, &rcDirty, FALSE);
         }
         return 0;
@@ -733,40 +759,80 @@ static void AdvanceAnimation(RECT FAR *rc)
 
 static void DrawFrame(HDC hdc, RECT FAR *rc)
 {
-    HBRUSH hbrShape, hbrOld;
-    int left, top;
+    int i;
 
     FillRect(hdc, rc, (HBRUSH) GetStockObject(BLACK_BRUSH));
 
-    left = rc->left + gX;
-    top = rc->top + gY;
+    /* Oldest (dimmest) ghost first, so the brightest ghost and the live
+       shape paint on top where they overlap. */
+    for (i = 0; i < gTrailCount; i++) {
+        int idx = (gTrailHead + TRAIL_LENGTH - gTrailCount + i) % TRAIL_LENGTH;
+        int age = gTrailCount - i; /* i=0 -> oldest -> largest age */
+        COLORREF dimmed = DimColor(gTrail[idx].color, age, gTrailCount);
+        DrawShapeAt(hdc, rc->left + gTrail[idx].x, rc->top + gTrail[idx].y,
+                    gTrail[idx].sides, dimmed);
+    }
 
-    hbrShape = CreateSolidBrush((gColorIndex == IDX_RAINBOW)
-                                     ? gColors[gRainbowIndex].color
-                                     : gColors[gColorIndex].color);
+    DrawShapeAt(hdc, rc->left + gX, rc->top + gY, gCurrentSides, CurrentColor());
+}
+
+static void DrawShapeAt(HDC hdc, int left, int top, int sides, COLORREF color)
+{
+    HBRUSH hbrShape, hbrOld;
+
+    hbrShape = CreateSolidBrush(color);
     hbrOld = SelectObject(hdc, hbrShape);
 
-    if (gCurrentSides <= 1) {
+    if (sides <= 1) {
         Ellipse(hdc, left, top, left + gShapeSize, top + gShapeSize);
     } else {
         POINT pts[MAX_SIDES];
         double centerX = left + gShapeSize / 2.0;
         double centerY = top + gShapeSize / 2.0;
         double radius = gShapeSize / 2.0;
-        double angleStep = 2.0 * PI / gCurrentSides;
+        double angleStep = 2.0 * PI / sides;
         /* Point-up looks right for every N-gon except a square, which
            reads to a human as a diamond unless rotated flat-top. */
-        double startAngle = (gCurrentSides == 4) ? (-PI / 2.0 + angleStep / 2.0) : (-PI / 2.0);
+        double startAngle = (sides == 4) ? (-PI / 2.0 + angleStep / 2.0) : (-PI / 2.0);
         int i;
 
-        for (i = 0; i < gCurrentSides; i++) {
+        for (i = 0; i < sides; i++) {
             double angle = startAngle + i * angleStep;
             pts[i].x = (int) (centerX + radius * cos(angle));
             pts[i].y = (int) (centerY + radius * sin(angle));
         }
-        Polygon(hdc, pts, gCurrentSides);
+        Polygon(hdc, pts, sides);
     }
 
     SelectObject(hdc, hbrOld);
     DeleteObject(hbrShape);
+}
+
+static COLORREF CurrentColor(void)
+{
+    return (gColorIndex == IDX_RAINBOW) ? gColors[gRainbowIndex].color
+                                         : gColors[gColorIndex].color;
+}
+
+/* Linearly interpolates color toward black. age 1 is the most recently
+   pushed (brightest) ghost, age maxAge the oldest (dimmest). */
+static COLORREF DimColor(COLORREF color, int age, int maxAge)
+{
+    double factor = (double) (maxAge - age + 1) / (maxAge + 1);
+    BYTE r = (BYTE) (GetRValue(color) * factor);
+    BYTE g = (BYTE) (GetGValue(color) * factor);
+    BYTE b = (BYTE) (GetBValue(color) * factor);
+    return RGB(r, g, b);
+}
+
+static void PushTrail(int x, int y, int sides, COLORREF color)
+{
+    gTrail[gTrailHead].x = x;
+    gTrail[gTrailHead].y = y;
+    gTrail[gTrailHead].sides = sides;
+    gTrail[gTrailHead].color = color;
+    gTrailHead = (gTrailHead + 1) % TRAIL_LENGTH;
+    if (gTrailCount < TRAIL_LENGTH) {
+        gTrailCount++;
+    }
 }
