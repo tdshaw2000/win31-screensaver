@@ -147,6 +147,15 @@ int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         return 0;
     }
 
+    if (mode == MODE_FULLSCREEN && hPrevInstance != NULL) {
+        /* The screensaver launcher can occasionally re-fire its idle timer
+           while an instance is still animating; each instance gets its own
+           fresh globals in Win16, so a second one would appear as the
+           shape "restarting" at (10, 10) in a new window layered over the
+           first. Exit instead of duplicating it. */
+        return 0;
+    }
+
     if (!hPrevInstance) {
         wc.style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
         wc.lpfnWndProc   = (WNDPROC) WndProc;
