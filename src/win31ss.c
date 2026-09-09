@@ -92,6 +92,13 @@ static int       gSides             = DEFAULT_SIDES;
 static int       gCurrentSides      = DEFAULT_SIDES; /* side count actually drawn this frame */
 static int       gX = 10, gY = 10, gDX = 1, gDY = 1;
 
+/* Offscreen buffer for double-buffered painting: WM_PAINT draws a full
+   frame here, then BitBlt's just the dirty rect to the screen in one
+   atomic call, so the screen never shows a mid-erase frame. */
+static HDC       gHdcMem    = NULL;
+static HBITMAP   gHbmMem    = NULL;
+static HBITMAP   gHbmMemOld = NULL;
+
 /* Dirty-rect margin around the shape's bounding box, to also cover the
    1px border Ellipse() draws with the default pen. */
 #define SHAPE_MARGIN    2
@@ -204,6 +211,21 @@ LONG FAR PASCAL WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     switch (message) {
     case WM_CREATE:
+        {
+            HDC hdcScreen = GetDC(hwnd);
+            GetClientRect(hwnd, &rc);
+            gHdcMem = CreateCompatibleDC(hdcScreen);
+            if (gHdcMem != NULL) {
+                gHbmMem = CreateCompatibleBitmap(hdcScreen, rc.right - rc.left, rc.bottom - rc.top);
+                if (gHbmMem != NULL) {
+                    gHbmMemOld = SelectObject(gHdcMem, gHbmMem);
+                } else {
+                    DeleteDC(gHdcMem);
+                    gHdcMem = NULL;
+                }
+            }
+            ReleaseDC(hwnd, hdcScreen);
+        }
         SetTimer(hwnd, TIMER_ID, TIMER_INTERVAL, NULL);
         return 0;
 
@@ -223,7 +245,15 @@ LONG FAR PASCAL WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_PAINT:
         hdc = BeginPaint(hwnd, &ps);
         GetClientRect(hwnd, &rc);
-        DrawFrame(hdc, &rc);
+        if (gHdcMem != NULL) {
+            DrawFrame(gHdcMem, &rc);
+            BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top,
+                   ps.rcPaint.right - ps.rcPaint.left,
+                   ps.rcPaint.bottom - ps.rcPaint.top,
+                   gHdcMem, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
+        } else {
+            DrawFrame(hdc, &rc);
+        }
         EndPaint(hwnd, &ps);
         return 0;
 
@@ -252,6 +282,12 @@ LONG FAR PASCAL WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_DESTROY:
         KillTimer(hwnd, TIMER_ID);
+        if (gHdcMem != NULL) {
+            SelectObject(gHdcMem, gHbmMemOld);
+            DeleteObject(gHbmMem);
+            DeleteDC(gHdcMem);
+            gHdcMem = NULL;
+        }
         if (gbFullscreen) {
             ShowCursor(TRUE);
         }
