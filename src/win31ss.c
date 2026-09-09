@@ -659,10 +659,13 @@ static void DrawFrame(HDC hdc, RECT FAR *rc)
         double centerY = top + gShapeSize / 2.0;
         double radius = gShapeSize / 2.0;
         double angleStep = 2.0 * PI / gCurrentSides;
+        /* Point-up looks right for every N-gon except a square, which
+           reads to a human as a diamond unless rotated flat-top. */
+        double startAngle = (gCurrentSides == 4) ? (-PI / 2.0 + angleStep / 2.0) : (-PI / 2.0);
         int i;
 
         for (i = 0; i < gCurrentSides; i++) {
-            double angle = -PI / 2.0 + i * angleStep;
+            double angle = startAngle + i * angleStep;
             pts[i].x = (int) (centerX + radius * cos(angle));
             pts[i].y = (int) (centerY + radius * sin(angle));
         }
