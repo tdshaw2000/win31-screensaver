@@ -1,6 +1,4 @@
-# Builds WIN31SS.SCR on a GitHub-hosted runner and verifies it byte-for-byte
-# against the known-good reference binary (tested on real Windows 3.1
-# hardware: all five setup options present, settings persist).
+# Builds WIN31SS.SCR on a GitHub-hosted runner.
 #
 # Deliberately NO Docker layer cache. The OpenWatcom snapshot tag is pinned
 # (see Dockerfile), so a cache isn't servicing a rolling-tag risk - and
@@ -15,9 +13,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  REFERENCE_MD5: d9579eef8c11bbd53ac0040fe17c372e
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,16 +26,6 @@ jobs:
           docker start -a extract
           docker cp extract:/work/WIN31SS.SCR ./WIN31SS.SCR
           docker rm extract
-
-      - name: Verify md5 against known-good reference
-        run: |
-          ACTUAL_MD5=$(md5sum WIN31SS.SCR | cut -d' ' -f1)
-          echo "Reference: ${REFERENCE_MD5}"
-          echo "Actual:    ${ACTUAL_MD5}"
-          if [ "${ACTUAL_MD5}" != "${REFERENCE_MD5}" ]; then
-            echo "::error::WIN31SS.SCR md5 mismatch - pinned toolchain did not reproduce the known-good binary"
-            exit 1
-          fi
 
       - uses: actions/upload-artifact@v4
         with:

@@ -78,8 +78,7 @@ tag, and public repos get free unlimited hosted-runner minutes, so the
 ~30-60s cold download of the snapshot has no cost to offset. The job runs
 the same five commands documented above - `docker build`, `docker create`,
 `docker start -a`, `docker cp` to pull `WIN31SS.SCR` out of the stopped
-container, then `docker rm` - then verifies the resulting binary's md5
-against the known-good reference before publishing it with
+container, then `docker rm` - then publishes the resulting binary with
 `actions/upload-artifact`.
 
 ## Testing in 86Box
