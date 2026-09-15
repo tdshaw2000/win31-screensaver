@@ -97,9 +97,9 @@ container, then `docker rm` - then publishes the resulting binary with
    `C:\WINDOWS\SYSTEM` (that subdirectory is for DLLs/drivers, not
    screensavers; Control Panel won't find it there).
 4. Open **Control Panel > Desktop**. It'll appear in the Screen Saver list as
-   **SCRNSAVE : Win31SS** (see the note on the `SCRNSAVE :` marker below for
-   why it's not just "Win31SS"). Use **Test** to run it fullscreen or
-   **Setup** to open the config dialog.
+   **SCRNSAVE : The Tim Saver 3000** (see the note on the `SCRNSAVE :` marker
+   below for why it's not just "The Tim Saver 3000"). Use **Test** to run it
+   fullscreen or **Setup** to open the config dialog.
 5. To check preview-mode rendering, just select it in the list - the
    Desktop applet's preview box calls it with `/p <hwnd>` automatically.
 
@@ -123,7 +123,7 @@ debugging build or discovery issues again:
   file for a specific code"). We found the exact requirement by pulling a
   stock Windows screensaver off the test VM and diffing its binary structure
   against ours with Wine's `winedump` tool. The Makefile sets this via a
-  `wlink` `option description 'SCRNSAVE : Win31SS'` directive - it must
+  `wlink` `option description 'SCRNSAVE : The Tim Saver 3000'` directive - it must
   come *after* the `system windows` and `name` directives in the `.lnk`
   file, or OpenWatcom's linker silently ignores it. A `STRINGTABLE`
   friendly-name resource (the modern Win95+/Win32 mechanism) was tried
