@@ -7,6 +7,13 @@
 # no installer to run.
 FROM debian:12-slim
 
+# Pinned deliberately. The upstream "Current-build" tag is republished daily,
+# so an unpinned build resolves to a different toolchain from one day to the
+# next - a green build can go red with no change in this repo. Win16 output
+# here is verified by byte-for-byte diffing against a reference binary, so the
+# toolchain must be a fixed input. Bump this as its own commit.
+ARG OW_SNAPSHOT_TAG=2026-09-01-Build
+
 ENV WATCOM=/opt/watcom
 ENV PATH="${WATCOM}/binl:${PATH}"
 ENV INCLUDE="${WATCOM}/h:${WATCOM}/h/win"
@@ -18,7 +25,7 @@ RUN apt-get update \
 
 RUN mkdir -p "${WATCOM}" \
     && curl -fsSL -o /tmp/ow-snapshot.tar.xz \
-        https://github.com/open-watcom/open-watcom-v2/releases/download/Current-build/ow-snapshot.tar.xz \
+        https://github.com/open-watcom/open-watcom-v2/releases/download/${OW_SNAPSHOT_TAG}/ow-snapshot.tar.xz \
     && tar -xJf /tmp/ow-snapshot.tar.xz -C "${WATCOM}" \
     && rm /tmp/ow-snapshot.tar.xz
 
