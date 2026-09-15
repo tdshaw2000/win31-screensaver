@@ -16,7 +16,7 @@ on:
     branches: [main]
 
 env:
-  REFERENCE_MD5: eca57f01130bfb871c0f6abf9e22a443
+  REFERENCE_MD5: d9579eef8c11bbd53ac0040fe17c372e
 
 jobs:
   build:
