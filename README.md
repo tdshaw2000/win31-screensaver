@@ -97,8 +97,9 @@ container, then `docker rm` - then publishes the resulting binary with
    `C:\WINDOWS\SYSTEM` (that subdirectory is for DLLs/drivers, not
    screensavers; Control Panel won't find it there).
 4. Open **Control Panel > Desktop**. It'll appear in the Screen Saver list as
-   **SCRNSAVE : The Tim Saver 3000** (see the note on the `SCRNSAVE :` marker
-   below for why it's not just "The Tim Saver 3000"). Use **Test** to run it
+   **The Tim Saver 3000** (the `SCRNSAVE :` prefix is a hidden marker Control
+   Panel requires internally to list the file at all - see the note below -
+   but it isn't part of the displayed name). Use **Test** to run it
    fullscreen or **Setup** to open the config dialog.
 5. To check preview-mode rendering, just select it in the list - the
    Desktop applet's preview box calls it with `/p <hwnd>` automatically.
