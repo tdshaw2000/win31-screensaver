@@ -21,7 +21,7 @@ Windows (and the Desktop control panel) invokes the `.SCR` with one of:
 | Invocation      | Behavior                                                        |
 |------------------|------------------------------------------------------------------|
 | (no args), `/s`  | Run fullscreen. Any mouse move (after the first) or key press exits. |
-| `/c`             | Show the configuration dialog (currently an empty stub).        |
+| `/c`             | Show the configuration dialog.        |
 | `/p <hwnd>`      | Embed a live preview into the given child window handle - this is what the Desktop applet's preview box uses. |
 | `/a <hwnd>`      | Password-change entry point. Not supported; this is a no-op.    |
 
@@ -100,7 +100,7 @@ against the known-good reference before publishing it with
 4. Open **Control Panel > Desktop**. It'll appear in the Screen Saver list as
    **SCRNSAVE : Win31SS** (see the note on the `SCRNSAVE :` marker below for
    why it's not just "Win31SS"). Use **Test** to run it fullscreen or
-   **Setup** to open the config dialog stub.
+   **Setup** to open the config dialog.
 5. To check preview-mode rendering, just select it in the list - the
    Desktop applet's preview box calls it with `/p <hwnd>` automatically.
 
