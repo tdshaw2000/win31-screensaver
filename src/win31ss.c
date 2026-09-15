@@ -32,7 +32,7 @@
 #define MIN_SPEED       1
 #define MAX_SPEED       25
 #define KEY_COLOR       "Color"
-#define DEFAULT_COLOR   0       /* index into gColors[] */
+#define DEFAULT_COLOR   1       /* index into gColors[] (Green) */
 #define KEY_SIZE        "Size"
 #define DEFAULT_SIZE    40      /* ball diameter, in pixels */
 #define MIN_SIZE        10
@@ -67,12 +67,12 @@ static char *gShapeNames[MAX_SIDES_SETTING + 1] = {
 };
 
 static COLOR_ENTRY gColors[] = {
-    { "Green",   RGB(0, 255, 0) },
-    { "Red",     RGB(255, 0, 0) },
     { "Blue",    RGB(0, 0, 255) },
-    { "Yellow",  RGB(255, 255, 0) },
-    { "White",   RGB(255, 255, 255) },
+    { "Green",   RGB(0, 255, 0) },
     { "Magenta", RGB(255, 0, 255) },
+    { "Red",     RGB(255, 0, 0) },
+    { "White",   RGB(255, 255, 255) },
+    { "Yellow",  RGB(255, 255, 0) },
 };
 #define NUM_COLORS (sizeof(gColors) / sizeof(gColors[0]))
 #define RAINBOW_NAME    "Rainbow"
