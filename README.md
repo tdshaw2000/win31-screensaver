@@ -68,19 +68,19 @@ docker build -t win31ss-build .
 docker run --rm -v "$(pwd)":/work -w /work win31ss-build make
 ```
 
-`.gitlab-ci.yml` defines a single `build` stage that builds this image and
-runs `make` inside it on every pipeline, publishing `WIN31SS.SCR` as a job
-artifact. It rebuilds the image from the Dockerfile each run rather than
-pulling a pre-built one from the GitLab Container Registry - slightly
-slower (~15-30s to re-fetch the OpenWatcom snapshot) but guaranteed to
-match what's committed, with no separate "rebuild and push the image" step
-to remember. If commits get frequent enough for that cost to matter, switch
-to building the image in its own job and pulling `$CI_REGISTRY_IMAGE`
-instead. Because the runner's Docker daemon is a docker-in-docker sibling
-container, the CI job can't bind-mount the checkout into it directly; it
-copies the source in at image-build time (already handled by the
-Dockerfile's `COPY`) and copies `WIN31SS.SCR` back out with `docker cp`
-after running `make`.
+`.github/workflows/build.yml` runs on GitHub's hosted `ubuntu-latest`
+runners on every push and pull request to `main`. It builds the same
+Docker image fresh each run (no `actions/cache` or other Docker layer
+cache) rather than pulling a pre-built one from a registry - the OpenWatcom
+snapshot tag is pinned deliberately (see the note on `ARG OW_SNAPSHOT_TAG`
+in the Dockerfile), so a cache isn't buying protection against a rolling
+tag, and public repos get free unlimited hosted-runner minutes, so the
+~30-60s cold download of the snapshot has no cost to offset. The job runs
+the same five commands documented above - `docker build`, `docker create`,
+`docker start -a`, `docker cp` to pull `WIN31SS.SCR` out of the stopped
+container, then `docker rm` - then verifies the resulting binary's md5
+against the known-good reference before publishing it with
+`actions/upload-artifact`.
 
 ## Testing in 86Box
 
